@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rubik's Cube Visual Solver</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+    }
+
+    .buttons {
+      margin-bottom: 20px;
+    }
+
+    button {
+      margin: 5px;
+      padding: 10px 15px;
+      font-size: 14px;
+    }
+
+    #status {
+      margin: 10px;
+      font-weight: bold;
+    }
+
+    /* Cube layout in 2D net: U at top, L-F-R-B in middle row, D at bottom */
+    .cube-net {
+      display: grid;
+      grid-template-columns: repeat(4, auto);
+      grid-template-rows: repeat(3, auto);
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .face {
+      display: grid;
+      grid-template-columns: repeat(3, 40px);
+      grid-template-rows: repeat(3, 40px);
+      gap: 2px;
+      background: #333;
+      padding: 5px;
+      border-radius: 5px;
+    }
+
+    .tile {
+      width: 40px;
+      height: 40px;
+      border: 1px solid #222;
+      border-radius: 3px;
+    }
+
+    .label {
+      text-align: center;
+      margin-top: 5px;
+      font-size: 14px;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+  <h1>Rubik's Cube Visual Solver</h1>
+
+  <!-- Action buttons -->
+  <div class="buttons">
+    <button onclick="scrambleCube()">Scramble</button>
+    <button onclick="solveCube()">Solve Step-by-Step</button>
+    <button onclick="rotate('U')">Rotate Up (U)</button>
+    <button onclick="rotate('D')">Rotate Down (D)</button>
+    <button onclick="rotate('F')">Rotate Front (F)</button>
+    <button onclick="rotate('B')">Rotate Back (B)</button>
+    <button onclick="rotate('L')">Rotate Left (L)</button>
+    <button onclick="rotate('R')">Rotate Right (R)</button>
+  </div>
+
+  <!-- Dynamic status updates -->
+  <div id="status">Status: Ready</div>
+
+  <!-- Cube layout -->
+  <div class="cube-net">
+    <!-- Top row: empty - Up face - empty -->
+    <div></div>
+    <div>
+      <div class="face" id="U"></div>
+      <div class="label">Up</div>
+    </div>
+    <div></div>
+    <div></div>
+
+    <!-- Middle row: Left, Front, Right, Back -->
+    <div>
+      <div class="face" id="L"></div>
+      <div class="label">Left</div>
+    </div>
+    <div>
+      <div class="face" id="F"></div>
+      <div class="label">Front</div>
+    </div>
+    <div>
+      <div class="face" id="R"></div>
+      <div class="label">Right</div>
+    </div>
+    <div>
+      <div class="face" id="B"></div>
+      <div class="label">Back</div>
+    </div>
+
+    <!-- Bottom row: empty - Down face - empty -->
+    <div></div>
+    <div>
+      <div class="face" id="D"></div>
+      <div class="label">Down</div>
+    </div>
+    <div></div>
+    <div></div>
+  </div>
+
+  <script>
+    // Cube class to manage all 6 faces and rotations
+    class Cube {
+      constructor() {
+        // Each face is an array of 9 color identifiers
+        this.faces = {
+          U: Array(9).fill('w'),
+          D: Array(9).fill('y'),
+          F: Array(9).fill('g'),
+          B: Array(9).fill('b'),
+          L: Array(9).fill('o'),
+          R: Array(9).fill('r')
+        };
+      }
+
+      // Rotate a single face clockwise (just the 3x3 grid)
+      rotateFace(face) {
+        let f = this.faces[face];
+        this.faces[face] = [
+          f[6], f[3], f[0],
+          f[7], f[4], f[1],
+          f[8], f[5], f[2]
+        ];
+      }
+
+      // Rotate a face AND its surrounding edge pieces
+      rotateFaceWithSides(face) {
+        this.rotateFace(face); // rotate main face
+
+        let f = this.faces;
+
+        const copy = (arr) => [...arr]; // shallow copy helper
+
+        switch (face) {
+          case 'U':
+            [f.F, f.R, f.B, f.L] = [copy(f.F), copy(f.R), copy(f.B), copy(f.L)];
+            [f.F[0], f.F[1], f.F[2],
+             f.R[0], f.R[1], f.R[2],
+             f.B[0], f.B[1], f.B[2],
+             f.L[0], f.L[1], f.L[2]
+            ] = [
+             f.R[0], f.R[1], f.R[2],
+             f.B[0], f.B[1], f.B[2],
+             f.L[0], f.L[1], f.L[2],
+             f.F[0], f.F[1], f.F[2]
+            ];
+            break;
+
+          case 'D':
+            [f.F, f.R, f.B, f.L] = [copy(f.F), copy(f.R), copy(f.B), copy(f.L)];
+            [f.F[6], f.F[7], f.F[8],
+             f.R[6], f.R[7], f.R[8],
+             f.B[6], f.B[7], f.B[8],
+             f.L[6], f.L[7], f.L[8]
+            ] = [
+             f.L[6], f.L[7], f.L[8],
+             f.F[6], f.F[7], f.F[8],
+             f.R[6], f.R[7], f.R[8],
+             f.B[6], f.B[7], f.B[8]
+            ];
+            break;
+
+          case 'F':
+            [f.U, f.R, f.D, f.L] = [copy(f.U), copy(f.R), copy(f.D), copy(f.L)];
+            [f.U[6], f.U[7], f.U[8],
+             f.R[0], f.R[3], f.R[6],
+             f.D[2], f.D[1], f.D[0],
+             f.L[8], f.L[5], f.L[2]
+            ] = [
+             f.L[8], f.L[5], f.L[2],
+             f.U[6], f.U[7], f.U[8],
+             f.R[0], f.R[3], f.R[6],
+             f.D[2], f.D[1], f.D[0]
+            ];
+            break;
+
+          case 'B':
+            [f.U, f.R, f.D, f.L] = [copy(f.U), copy(f.R), copy(f.D), copy(f.L)];
+            [f.U[0], f.U[1], f.U[2],
+             f.L[0], f.L[3], f.L[6],
+             f.D[8], f.D[7], f.D[6],
+             f.R[8], f.R[5], f.R[2]
+            ] = [
+             f.R[8], f.R[5], f.R[2],
+             f.U[0], f.U[1], f.U[2],
+             f.L[0], f.L[3], f.L[6],
+             f.D[8], f.D[7], f.D[6]
+            ];
+            break;
+
+          case 'L':
+            [f.U, f.F, f.D, f.B] = [copy(f.U), copy(f.F), copy(f.D), copy(f.B)];
+            [f.U[0], f.U[3], f.U[6],
+             f.F[0], f.F[3], f.F[6],
+             f.D[0], f.D[3], f.D[6],
+             f.B[8], f.B[5], f.B[2]
+            ] = [
+             f.B[8], f.B[5], f.B[2],
+             f.U[0], f.U[3], f.U[6],
+             f.F[0], f.F[3], f.F[6],
+             f.D[0], f.D[3], f.D[6]
+            ];
+            break;
+
+          case 'R':
+            [f.U, f.F, f.D, f.B] = [copy(f.U), copy(f.F), copy(f.D), copy(f.B)];
+            [f.U[2], f.U[5], f.U[8],
+             f.B[6], f.B[3], f.B[0],
+             f.D[2], f.D[5], f.D[8],
+             f.F[2], f.F[5], f.F[8]
+            ] = [
+             f.F[2], f.F[5], f.F[8],
+             f.U[2], f.U[5], f.U[8],
+             f.B[6], f.B[3], f.B[0],
+             f.D[2], f.D[5], f.D[8]
+            ];
+            break;
+        }
+      }
+    }
+
+    // Global cube instance and scramble memory
+    let cube = new Cube();
+    let scrambleMoves = [];
+
+    // Map color codes to actual CSS colors
+    const colorMap = {
+      w: 'white',
+      y: 'yellow',
+      g: 'green',
+      b: 'blue',
+      o: 'orange',
+      r: 'red'
+    };
+
+    // Renders each face on the cube
+    function renderCube() {
+      for (let face of ['U', 'D', 'F', 'B', 'L', 'R']) {
+        const container = document.getElementById(face);
+        container.innerHTML = '';
+        for (let color of cube.faces[face]) {
+          const tile = document.createElement('div');
+          tile.className = 'tile';
+          tile.style.backgroundColor = colorMap[color];
+          container.appendChild(tile);
+        }
+      }
+    }
+
+    // Rotate one face, push move to history
+    function rotate(face) {
+      cube.rotateFaceWithSides(face);
+      scrambleMoves.push(face);
+      renderCube();
+      document.getElementById('status').innerText = `Rotated: ${face}`;
+    }
+
+    // Randomly scramble the cube
+    function scrambleCube() {
+      scrambleMoves = [];
+      let faces = ['U', 'D', 'F', 'B', 'L', 'R'];
+      for (let i = 0; i < 10; i++) {
+        let move = faces[Math.floor(Math.random() * faces.length)];
+        cube.rotateFaceWithSides(move);
+        scrambleMoves.push(move);
+      }
+      renderCube();
+      document.getElementById('status').innerText = `Scrambled: ${scrambleMoves.join(', ')}`;
+    }
+
+    // Solve the cube using reverse of scramble 
+    function solveCube() {
+      if (scrambleMoves.length === 0) {
+        document.getElementById('status').innerText = 'Nothing to solve!';
+        return;
+      }
+
+      let reverseMoves = scrambleMoves.slice().reverse();
+      let i = 0;
+      document.getElementById('status').innerText = 'Solving... Please wait.';
+
+      let interval = setInterval(() => {
+        if (i >= reverseMoves.length) {
+          clearInterval(interval);
+          document.getElementById('status').innerText = 'Cube Solved!';
+          return;
+        }
+
+        let move = reverseMoves[i];
+
+        // 3 clockwise = 1 counter-clockwise
+        for (let j = 0; j < 3; j++) {
+          cube.rotateFaceWithSides(move);
+        }
+
+        renderCube();
+        i++;
+      }, 800);
+    }
+
+    // Initial render
+    renderCube();
+  </script>
+</body>
+</html>
